@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>SASE Home Pro - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background-color: #0b0f1a; color: #e5e7eb; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        /* Estilos para la tabla mejorada */
+        .log-table { table-layout: fixed; width: 100%; border-collapse: collapse; }
+        .log-table th, .log-table td { padding: 8px 10px; text-align: left; }
+    </style>
+</head>
+<body x-data="saseApp()" x-init="init()">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-64 glass border-r border-gray-800 p-6 flex flex-col">
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">SASE HOME PRO</h1>
+            <nav class="mt-10 space-y-4 flex-1">
+                <a href="#" class="flex items-center space-x-3 text-blue-400 bg-blue-400/10 p-2 rounded-lg"><span class="w-2 h-2 bg-blue-400 rounded-full"></span> <span>Dashboard</span></a>
+                <!-- El enlace usa el puerto capturado por Alpine.js -->
+                <a :href="'http://127.0.0.1:' + adminPort + '/certs/ca.crt'" download class="flex items-center space-x-3 text-gray-400 hover:text-white p-2"><span>🛡️ Certificado</span></a>
+            </nav>
+            <div class="text-xs text-gray-500">v1.0.1 (Traffic View)</div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto p-8">
+            <header class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-semibold">Resumen del Sistema</h2>
+                <div class="flex space-x-4">
+                    <div class="glass px-4 py-2 rounded-lg text-sm text-emerald-400">● Core Rust</div>
+                </div>
+            </header>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-6 mb-8">
+                <div class="glass p-6 rounded-2xl">
+                    <p class="text-gray-400 text-sm">Bloqueos Hoy</p>
+                    <p class="text-4xl font-mono mt-2" x-text="config.stats_blocked_today"></p>
+                </div>
+                <div class="glass p-6 rounded-2xl">
+                    <p class="text-gray-400 text-sm">Dominios en Blacklist</p>
+                    <p class="text-4xl font-mono mt-2" x-text="config.blocked_domains.length"></p>
+                </div>
+                <div class="glass p-6 rounded-2xl">
+                    <p class="text-gray-400 text-sm">Estado del Proxy</p>
+                    <p class="text-4xl font-mono mt-2 text-emerald-500">ACTIVE</p>
+                </div>
+            </div>
+
+            <!-- Content Grid -->
+            <div class="grid grid-cols-1 gap-8">
+                <!-- Real-time Logs -->
+                <div class="glass rounded-2xl overflow-hidden flex flex-col h-[500px]">
+                    <div class="p-4 border-b border-gray-800 flex justify-between bg-white/5">
+                        <h3 class="font-bold">Traffic Feed (Últimas 10 Líneas)</h3>
+                        <span class="text-xs text-gray-500">Traceability Stream</span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto font-mono text-xs">
+                        <table class="log-table">
+                            <thead>
+                                <tr class="text-gray-400 uppercase text-xs border-b border-gray-800 bg-white/5 sticky top-0">
+                                    <th style="width: 10%;">Time</th>
+                                    <th style="width: 10%;">IP</th>
+                                    <th style="width: 10%;">Method</th>
+                                    <th style="width: 55%;">Domain/Path</th>
+                                    <th style="width: 15%;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(log, index) in logs" :key="log.timestamp + log.domain">
+                                    <tr x-show="index < 10" class="border-b border-gray-800 hover:bg-white/10">
+                                        <td class="text-gray-500" x-text="log.timestamp"></td>
+                                        <td class="font-bold" x-text="log.src_ip"></td>
+                                        <td :class="log.method === 'POST' || log.method === 'PUT' ? 'text-orange-400' : 'text-yellow-400'" x-text="log.method"></td>
+                                        <td class="text-gray-300 truncate" x-text="log.domain + log.url_path"></td>
+                                        <td :class="log.action === 'BLOCK' ? 'text-red-400 font-bold' : 'text-emerald-400'" x-text="log.action"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <div x-show="logs.length === 0" class="text-center p-10 text-gray-600">
+                            Esperando tráfico en 0.0.0.0:8080...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Policy Management -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="font-bold mb-4">Gestión de Políticas</h3>
+                    <div class="space-y-4">
+                        <label class="block text-sm text-gray-400">Dominios Bloqueados (uno por línea)</label>
+                        <textarea class="w-full h-64 bg-black/40 border border-gray-700 rounded-xl p-4 text-sm font-mono focus:border-blue-500 outline-none" 
+                                  x-model="domainListText" placeholder="facebook.com"></textarea>
+                        <button @click="saveConfig()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition">
+                            Guardar Cambios Instantáneamente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function saseApp() {
+            return {
+                config: { blocked_domains: [], stats_blocked_today: 0 },
+                logs: [],
+                domainListText: '',
+                adminPort: window.location.port, 
+                init() {
+                    this.fetchConfig();
+                    this.startLogStream();
+                },
+                async fetchConfig() {
+                    const res = await fetch('/api/config');
+                    this.config = await res.json();
+                    this.domainListText = this.config.blocked_domains.join('\n');
+                },
+                async saveConfig() {
+                    this.config.blocked_domains = this.domainListText.split('\n').filter(d => d.trim());
+                    await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.config)
+                    });
+                    alert("Políticas recargadas en caliente.");
+                },
+                startLogStream() {
+                    const es = new EventSource('/api/logs/stream');
+                    es.onmessage = (e) => {
+                        const log = JSON.parse(e.data);
+                        this.logs.unshift(log); // Agregar al principio
+                        if (this.logs.length > 10) this.logs.pop(); // Limitar a 10 líneas
+                        if (log.action === 'BLOCK') this.config.stats_blocked_today++;
+                    };
+                }
+            }
+        }
+    </script>
+</body>
+</html>
