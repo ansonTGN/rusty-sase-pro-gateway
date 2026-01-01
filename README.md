@@ -24,7 +24,7 @@ El sistema implementa una arquitectura de **Micro-Kernel de Seguridad**, donde l
 
 ### 👤 Autor y Mantenimiento
 
-Este proyecto es diseñado y mantenido por **Ángel Urbina**, experto en arquitectura de software y ciberseguridad.
+Este proyecto es diseñado y mantenido por **Ángel Urbina**.
 
 [![LinkedIn](https://img.shields.io/badge/Connect_on-LinkedIn-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/angelurbina/)
 
