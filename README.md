@@ -2,126 +2,109 @@
 
 ## Plataforma Zero Trust SASE (Secure Access Service Edge) de Alto Rendimiento
 
-**Rusty SASE Pro Gateway** es una implementación *minimal-core* de un *gateway* de seguridad de borde, diseñada para ejecutar el filtrado de tráfico a velocidad nativa. Utilizando el runtime asíncrono de **Rust** (`Tokio`) y una arquitectura de planos de control y datos desacoplados, ofrece observabilidad de nivel profesional y gestión de políticas de latencia ultrabaja.
+Una arquitectura de seguridad de red de vanguardia implementada en **Rust**, diseñada para un rendimiento de latencia ultrabaja. Rusty SASE Pro Gateway desacopla el **Plano de Datos (Data Plane)** de seguridad del **Plano de Control (Control Plane)** de gestión, ofreciendo Observabilidad NSS y recarga de políticas atómica (**Hot-Reload**).
 
-| **Estado** | **Versión** | **Licencia** | **Autor** |
-| :---: | :---: | :---: | :---: |
-| ✅ Estable | v1.0.2 | [MIT](LICENSE) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
+[![GitHub license](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/yourusername/rusty-sase-pro-gateway)
+[![Rust Version](https://img.shields.io/badge/Rust-1.70+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+
+| **Tecnologías Core** | **Frontend/UX** | **Patrón de Arquitectura** |
+| :--- | :--- | :--- |
+| Rust (`Tokio`, `hudsucker`, `rcgen`) | Alpine.js, Tailwind CSS, SSE (Server-Sent Events) | SASE, Zero Trust Admin, Micro-Kernel Networking |
+
+| **Estado** | **Versión** | **Autor** |
+| :---: | :---: | :---: |
+| ✅ Estable | v1.0.2 | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
 
 ---
 
-## 🚀 Características Clave
+## 🌎 Idiomas
 
-| Característica | Backend (Rust) | Frontend (Alpine/Tailwind) |
-| :--- | :--- | :--- |
-| **Arquitectura** | Proxy Asíncrono (`tokio`, `hudsucker`) para alto rendimiento. | Reactivo, Zero-Build (CDN-based Alpine.js + Tailwind CSS). |
-| **Observabilidad NSS** | Logs **estructurados en JSON** (`tracing`) para integración SIEM/SOAR. | **SSE (Server-Sent Events)**: Flujo de tráfico en vivo (últimas 10 líneas) sin *polling*. |
-| **Políticas** | `tokio::sync::RwLock` | **Hot-Reload:** Cambios en la lista negra aplicados **instantáneamente**. |
-| **Seguridad** | **Zero Trust Admin** (`127.0.0.1`) y Inspección TLS (Generación de CA con `rcgen`). | Interfaz profesional con filtro de logs por IP/Dominio/User-Agent. |
+[🇪🇸 Español](#️-rusty-sase-pro-gateway) • [🇬🇧 English](#-rusty-sase-pro-gateway) • [Català](#-rusty-sase-pro-gateway)
 
 ---
 
 ## 🔬 Arquitectura Técnica Detallada
 
-El diseño desacopla el *Data Plane* (DP) del *Control Plane* (CP) para garantizar una latencia de filtrado predecible.
+El diseño del Gateway se centra en la **disponibilidad del servicio (HA)** y la **integridad de las políticas**.
 
-### **Data Plane (DP) - Rust Core**
+### 1. Data Plane (DP): Lógica de Filtrado de Latencia Ultra Baja
 
-*   **Rendimiento:** Utiliza **Rust** y el runtime **Tokio** para evitar el *jitter* del GC y asegurar latencias de milisegundos.
-*   **Aseguramiento Atómico:** La configuración se almacena en `RwLock<AppState>`, garantizando que el *Data Plane* nunca se bloquee, ya que miles de conexiones pueden leer (`read().await`) simultáneamente, mientras que las actualizaciones de políticas (`write().await`) son ultrarrápidas y atómicas.
-*   **Trazabilidad:** Los logs NSS capturan metadatos críticos (`src_ip`, `user_agent`) y se escriben en `logs/sase.json` para análisis forense externo.
+El DP está impulsado por el runtime asíncrono **Tokio** y el framework de proxy `hudsucker`.
 
-### **Control Plane (CP) - Axum/SSE**
+| Mecanismo | Implementación Técnica | Racional de Ciberseguridad |
+| :--- | :--- | :--- |
+| **Rendimiento** | Rust Core (`tokio`) | Elimina el *jitter* de las máquinas virtuales (Java/Go GC) para garantizar una latencia de filtrado predecible, esencial para la experiencia del usuario y la respuesta de red. |
+| **Inspección L7** | `rcgen` (Generación de CA/Certificados) | Implementación de **SSL Inspection**. El Gateway intercepta el *handshake* TLS, firma dinámicamente certificados con su CA raíz generada *in-memory* y permite la aplicación de filtros de dominio en tráfico cifrado. |
+| **Logs Forenses (NSS)** | `tracing-subscriber::json()` | Generación de logs de tráfico **estructurados en JSON** a través de `tracing`. Cada evento incluye `src_ip`, `user_agent`, `domain` y `action`, lo que garantiza una trazabilidad de nivel forense, lista para la ingesta en plataformas SIEM. |
 
-*   **Acceso Seguro:** El CP escucha en un puerto dinámico de **`127.0.0.1`** (localhost), adhiriéndose estrictamente a un modelo de administración Zero Trust.
-*   **UX:** El Dashboard de gestión se lanza automáticamente al iniciar el programa (`opener`) y utiliza **SSE** para la visualización de logs en tiempo real.
+### 2. Control Plane (CP): Configuración Atómica y Zero Trust
+
+El CP gestiona la configuración de forma segura y proporciona el *dashboard* de observabilidad.
+
+| Mecanismo | Implementación Técnica | Racional de Ciberseguridad |
+| :--- | :--- | :--- |
+| **Recarga de Políticas** | `tokio::sync::RwLock<AppState>` | **Hot-Reload Atómico**. El DP mantiene un bloqueo de lectura (`read().await`) constante para alta concurrencia. La interfaz de administración realiza un bloqueo de escritura (`write().await`) **instantáneo** para aplicar cambios de política, garantizando la consistencia y la alta disponibilidad del servicio. |
+| **Seguridad de Acceso** | `TcpListener::bind("127.0.0.1:0")` | Implementación de **Zero Trust Admin**. La API de gestión solo es accesible desde el localhost, aislando la superficie de ataque de gestión. El puerto dinámico evita conflictos de `AddrInUse`. |
+| **Observabilidad UX** | SSE (Server-Sent Events) | Protocolo de *push* de datos para el *Traffic Feed* en el Dashboard. Más eficiente que el *polling* para la visualización de logs en vivo. |
 
 ---
 
 ## 🛠️ Requisitos e Instalación
 
-### Estructura del Proyecto
+### Requisitos
 
-Asegúrese de que su proyecto tenga la siguiente estructura:
+*   **Rust:** Versión 1.70+
+*   **Sistema Operativo:** Linux (requerido para los comandos de red).
+*   **Privilegios:** Se requiere `sudo` para la ejecución.
 
-```
-rusty-sase-pro/
-├── Cargo.toml
-├── src/
-│   └── main.rs
-└── static/
-    └── index.html
-```
+### Pasos de Despliegue
 
-### 1. Dependencias (`Cargo.toml`)
+1.  **Clonar el Repositorio (o estructurar los archivos):**
 
-Este archivo define el entorno de ejecución.
+    ```bash
+    git clone https://github.com/yourusername/rusty-sase-pro-gateway
+    cd rusty-sase-pro-gateway
+    ```
 
-```toml
-[package]
-name = "rusty-sase-pro"
-version = "1.0.0"
-edition = "2021"
+2.  **Compilar el binario optimizado:**
 
-[dependencies]
-tokio = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1", features = ["sync"] } # Necesario para SSE
-hudsucker = "0.21"
-rcgen = "0.11"
-axum = "0.7"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-tracing-appender = "0.2"
-chrono = "0.4"
-futures-util = { version = "0.3", features = ["io"] }
-tower-http = { version = "0.5", features = ["fs"] }
-rustls-pemfile = "1.0"
-async-trait = "0.1"
-opener = "0.7" # Para abrir el navegador
-```
-
-### 2. Pasos de Despliegue
-
-1.  **Compilar la versión optimizada (Recomendado):**
     ```bash
     cargo build --release
     ```
-2.  **Ejecutar el Gateway (¡Requiere SUDO!):**
+
+3.  **Ejecutar el Gateway (¡Requiere SUDO!):**
+
     ```bash
-    # Se requiere sudo para la vinculación del puerto 8080 y permisos de log.
+    # Se recomienda el modo release para el rendimiento.
     sudo ./target/release/rusty-sase-pro
     ```
 
-> **NOTA:** La terminal mostrará el puerto dinámico. El navegador se abrirá automáticamente.
+> **NOTA:** Al arrancar, el navegador se abrirá automáticamente en el puerto dinámico asignado a la **Admin UI**.
 
 ## 🌐 Guía de Uso del Sistema
 
 ### Paso 1: Configuración de Políticas y Dashboard
 
-1.  **Dashboard:** El navegador se abrirá automáticamente en `http://127.0.0.1:<Puerto_Dinámico>`.
-2.  **Filtrado de Logs:** Utilice el menú desplegable y el campo de texto para filtrar los eventos por **Dominio, IP Origen, Método o User-Agent**.
-3.  **Detalles:** Haga clic en cualquier fila de la tabla para ver todos los metadatos capturados (incluido el User-Agent).
+1.  **Dashboard:** Se abre automáticamente en `Admin UI: http://127.0.0.1:<Puerto_Dinámico>`.
+2.  **Gestión de Políticas:** Añada dominios en la lista negra (Hot-Reload instantáneo al guardar).
+3.  **Análisis:** Utilice el menú desplegable y la barra de búsqueda para filtrar el Traffic Feed por **IP Origen, Dominio, Método o User-Agent**. Haga clic en una fila para ver el detalle completo.
 
 ### Paso 2: Configuración del Proxy Cliente
 
-Para que el filtrado funcione, debe redirigir el tráfico al proxy:
+Para que el filtrado se aplique, debe dirigir el tráfico de sus dispositivos al Gateway:
 
-*   **Gateway IP:** La IP de red local de su máquina (ej: `192.168.1.50`).
-*   **Proxy Puerto:** `8080`
-
-**Configuración en Clientes:** Configure el **Proxy Manual** de su navegador o dispositivo a **`<Gateway IP>:8080`**.
+*   **Gateway IP:** `<IP Local de su máquina>` (ej: `192.168.1.50`).
+*   **Proxy Puerto:** `8080` (Puerto fijo del Data Plane).
 
 ### Paso 3: Instalación del Certificado (HTTPS)
 
-Para evitar errores de seguridad en el tráfico cifrado (HTTPS):
+**Obligatorio** para el tráfico cifrado:
 
-1.  En el Dashboard, haga clic en **🛡️ Certificado CA** para descargar `ca.crt`.
-2.  Instale `ca.crt` en su dispositivo como una **"Autoridad de Certificación Raíz de Confianza"**.
+1.  Descargue **`ca.crt`** desde el Dashboard (enlace 🛡️ Certificado CA).
+2.  Instale este archivo en su dispositivo cliente como una **"Autoridad de Certificación Raíz de Confianza"**.
 
 ---
-
 ---
 
 # 🇬🇧 ENGLISH README
@@ -134,7 +117,7 @@ Para evitar errores de seguridad en el tráfico cifrado (HTTPS):
 
 | **Status** | **Version** | **License** | **Author** |
 | :---: | :---: | :---: | :---: |
-| ✅ Stable | v1.0.2 | [MIT](LICENSE) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
+| ✅ Stable | v1.0.2 | [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
 
 ---
 
@@ -143,63 +126,63 @@ Para evitar errores de seguridad en el tráfico cifrado (HTTPS):
 | Feature | Backend (Rust) | Frontend (Alpine/Tailwind) |
 | :--- | :--- | :--- |
 | **Architecture** | Asynchronous Proxy (`tokio`, `hudsucker`) for high concurrency. | Reactive, Zero-Build (CDN-based Alpine.js + Tailwind CSS). |
-| **NSS Observability** | **Structured JSON logs** (`tracing`) for SIEM/SOAR integration. | **SSE (Server-Sent Events)**: Live traffic stream (last 10 lines) without polling. |
+| **NSS Observability** | **Structured JSON logs** (`tracing`) for SIEM/SOAR integration. | **SSE (Server-Sent Events)**: Live traffic stream (last 10 lines) and advanced filtering. |
 | **Policies** | `tokio::sync::RwLock` | **Hot-Reload:** Blacklist changes are applied **instantly**. |
 | **Security** | **Zero Trust Admin** (`127.0.0.1`) and TLS Inspection (CA generation with `rcgen`). | Professional UI with log filtering by IP/Domain/User-Agent. |
 
 ---
 
-## 🔬 Detailed Technical Architecture (Cybersecurity Ph.D. Level)
+## 🔬 Detailed Technical Architecture
 
-The project adheres to the principle of separation of concerns through two decoupled planes, prioritizing data plane performance over management latency.
+The Gateway's design focuses on **Service Availability (HA)** and **Policy Integrity**.
 
-### **Data Plane (DP) - Rust Core**
+### 1. Data Plane (DP): Ultra-Low Latency Filtering Logic
 
-*   **Performance:** Uses **Rust** and the **Tokio** runtime to avoid GC *jitter* and ensure ultra-low, predictable latencies, critical for real-time network traffic.
-*   **Atomic Assurance:** Configuration is held in `RwLock<AppState>`, ensuring the Data Plane is never blocked, as thousands of connections can read (`read().await`) simultaneously while policy updates (`write().await`) are instantaneous and atomic.
-*   **Traceability:** NSS logs capture critical metadata (`src_ip`, `domain`, `user_agent`) and are written to `logs/sase.json` for external forensic analysis.
+The DP is powered by the asynchronous **Tokio** runtime and the `hudsucker` proxy framework.
 
-### **Control Plane (CP) - Axum/SSE**
+| Mechanism | Technical Implementation | Cybersecurity Rationale |
+| :--- | :--- | :--- |
+| **Performance** | Rust Core (`tokio`) | Eliminates virtual machine *jitter* (Java/Go GC) to ensure predictable filtering latency, crucial for user experience and network responsiveness. |
+| **L7 Inspection** | `rcgen` (CA/Certificate Generation) | Implements **SSL Inspection**. The Gateway intercepts the TLS handshake, dynamically signs certificates with its *in-memory* root CA, and allows domain filter application on encrypted traffic. |
+| **Forensic Logs (NSS)**| `tracing-subscriber::json()` | Generates **structured JSON traffic logs** via `tracing`. Each event includes `src_ip`, `user_agent`, `domain`, and `action`, ensuring forensic-level traceability, ready for SIEM platform ingestion. |
 
-*   **Secure Access:** The CP listens on a dynamic port on **`127.0.0.1`** (localhost), strictly adhering to a Zero Trust administration model.
-*   **UX:** The management Dashboard is launched automatically upon program start (`opener`) and uses **SSE** for real-time log visualization.
+### 2. Control Plane (CP): Atomic Configuration and Zero Trust
+
+The CP securely manages configuration and provides the observability dashboard.
+
+| Mechanism | Technical Implementation | Cybersecurity Rationale |
+| :--- | :--- | :--- |
+| **Policy Reload** | `tokio::sync::RwLock<AppState>` | **Atomic Hot-Reload**. The DP holds a constant read lock (`read().await`) for high concurrency. The admin interface acquires an **instantaneous** write lock (`write().await`) to apply policy changes, guaranteeing service consistency and high availability. |
+| **Access Security** | `TcpListener::bind("127.0.0.1:0")` | Implements **Zero Trust Admin**. The management API is only accessible locally (localhost), isolating the management attack surface. The dynamic port avoids `AddrInUse` conflicts. |
+| **Observability UX** | SSE (Server-Sent Events) | Real-time data *push* protocol for the *Traffic Feed* on the Dashboard. More efficient than polling for live log visualization. |
 
 ---
 
-## 🛠️ Requirements and Deployment
+## 🛠️ Requirements and Installation
 
-### Project Structure
+### Prerequisites
 
-Ensure your project has the following structure:
+*   **Rust:** Version 1.70+
+*   **Operating System:** Linux (required for network commands).
+*   **Privileges:** `sudo` is required for execution.
 
-```
-rusty-sase-pro/
-├── Cargo.toml
-├── src/
-│   └── main.rs
-└── static/
-    └── index.html
-```
+### Deployment Steps
 
-### 1. Dependencies (`Cargo.toml`)
+1.  **Clone the Repository (or structure files):**
 
-This file defines the execution environment.
+    ```bash
+    git clone https://github.com/yourusername/rusty-sase-pro-gateway
+    cd rusty-sase-pro-gateway
+    ```
 
-```toml
-[package]
-name = "rusty-sase-pro"
-version = "1.0.0"
-edition = "2021"
-# ... (see main Spanish section for full Cargo.toml)
-```
+2.  **Compile the optimized binary:**
 
-### 2. Deployment Steps
-
-1.  **Compile the optimized binary (Recommended):**
     ```bash
     cargo build --release
     ```
-2.  **Run the Gateway (Requires SUDO!):**
+
+3.  **Run the Gateway (Requires SUDO!):**
+
     ```bash
     # SUDO is required for port 8080 binding and log permissions.
     sudo ./target/release/rusty-sase-pro
@@ -209,29 +192,27 @@ edition = "2021"
 
 ## 🌐 System Usage Guide
 
-Upon execution, the browser will automatically open the Admin UI, and the proxy will become active.
+Upon execution, the browser will automatically open the Admin UI.
 
 ### 1. Policy and Dashboard Configuration
 
-1.  **Dashboard:** The browser will open automatically to `Admin UI: http://127.0.0.1:<Dynamic_Port>`.
-2.  **Log Filtering:** Use the dropdown menu and text field to filter events by **Domain, Source IP, Method, or User-Agent**.
-3.  **Details:** Click any row in the table to view all captured metadata (including the User-Agent) in the detail modal.
+1.  **Dashboard:** Browser opens: `Admin UI: http://127.0.0.1:<Dynamic_Port>`.
+2.  **Policy Management:** Add domains to the blacklist and save (instant Hot-Reload).
+3.  **Analysis:** Use the dropdown menu and text field to filter the Traffic Feed by **Source IP, Domain, Method, or User-Agent**. Click a row to see full metadata details.
 
 ### 2. Client Proxy Configuration
 
-To make filtering work, you must redirect client traffic to the proxy:
+To make filtering work, you must redirect client traffic to the Gateway:
 
-*   **Gateway IP:** The local network IP of your machine (e.g., `192.168.1.50`).
-*   **Proxy Port:** `8080`
-
-**Client Setup:** Configure the **Manual Proxy** of your browser or device to **`<Gateway IP>:8080`**.
+*   **Proxy Host:** `<Your Machine's Local IP>` (e.g., `192.168.1.50`).
+*   **Proxy Port:** `8080` (Fixed Data Plane Port).
 
 ### 3. Certificate Installation (HTTPS)
 
-To avoid security errors on encrypted traffic (HTTPS):
+**Mandatory** for encrypted traffic:
 
-1.  In the Dashboard, click **🛡️ Certificado CA** to download `ca.crt`.
-2.  Install `ca.crt` on your client device as a **"Trusted Root Certification Authority."**
+1.  Download **`ca.crt`** from the Dashboard (🛡️ Certificado CA link).
+2.  Install this file on your client device as a **"Trusted Root Certification Authority."**
 
 ---
 
@@ -247,7 +228,7 @@ To avoid security errors on encrypted traffic (HTTPS):
 
 | **Estat** | **Versió** | **Llicència** | **Autor** |
 | :---: | :---: | :---: | :---: |
-| ✅ Estable | v1.0.2 | [MIT](LICENSE) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
+| ✅ Estable | v1.0.2 | [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) | [![LinkedIn](https://img.shields.io/badge/LinkedIn-Ángel%20Urbina-0A66C2?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/angelurbina/) |
 
 ---
 
@@ -256,92 +237,77 @@ To avoid security errors on encrypted traffic (HTTPS):
 | Característica | Backend (Rust) | Frontend (Alpine/Tailwind) |
 | :--- | :--- | :--- |
 | **Arquitectura** | Proxy Asíncron (`tokio`, `hudsucker`) per a alta concurrència. | Reactiu, Zero-Build (Alpine.js + Tailwind CSS via CDN). |
-| **Observabilitat NSS** | Registres **estructurats en JSON** (`tracing`) per a integració SIEM/SOAR. | **SSE (Server-Sent Events)**: Flux de trànsit en temps real (últimes 10 línies) sense *polling*. |
+| **Observabilitat NSS** | Registres **estructurats en JSON** (`tracing`) per a integració SIEM/SOAR. | **SSE (Server-Sent Events)**: Flux de trànsit en temps real (últimes 10 línies) i filtre avançat. |
 | **Polítiques** | `tokio::sync::RwLock` | **Recàrrega en calent (Hot-Reload):** Els canvis a la llista negra s'apliquen **instantàniament**. |
-| **Seguretat** | **Zero Trust Admin** (`127.0.0.1`) i Inspecció TLS (Generació de CA amb `rcgen`). | Interfície professional amb filtre de registres per IP/Domini/User-Agent. |
+| **Seguretat** | **Zero Trust Admin** (`127.0.0.1`) i Inspecció TLS (CA generation amb `rcgen`). | Interfície professional amb filtre de registres per IP/Domini/User-Agent. |
 
 ---
 
-## 🔬 Arquitectura Tècnica Detallada (Nivell Dr. en Ciberseguretat)
+## 🔬 Arquitectura Tècnica Detallada
 
-El projecte s'adhereix al principi de separació de preocupacions a través de dos plans desacoblats, prioritzant el rendiment del *data plane* sobre la latència de gestió.
+El disseny de la Passarel·la se centra en la **Disponibilitat del Servei (HA)** i la **Integritat de les Polítiques**.
 
-### **Data Plane (DP) - Rust Core**
+### 1. Data Plane (DP): Lògica de Filtratge de Latència Ultra Baixa
 
-*   **Rendiment:** Utilitza **Rust** i el *runtime* **Tokio** per evitar el *jitter* del GC i garantir latències ultrabaixes i predictibles, crucials per al trànsit de xarxa en temps real.
-*   **Assegurament Atòmic:** La configuració es manté a `RwLock<AppState>`, assegurant que el *Data Plane* mai es bloquegi, ja que milers de connexions poden llegir (`read().await`) simultàniament mentre que les actualitzacions de polítiques (`write().await`) són instantànies i atòmiques.
-*   **Traçabilitat:** Els registres NSS capturen metadades crítiques (`src_ip`, `domain`, `user_agent`) i s'escriuen a `logs/sase.json` per a anàlisi forense externa.
+El DP està impulsat pel *runtime* asíncron **Tokio** i el framework de proxy `hudsucker`.
 
-### **Control Plane (CP) - Axum/SSE**
+| Mecanisme | Implementació Tècnica | Racional de Ciberseguretat |
+| :--- | :--- | :--- |
+| **Rendiment** | Rust Core (`tokio`) | Elimina el *jitter* de les màquines virtuals (Java/Go GC) per garantir una latència de filtratge predictible, crucial per a l'experiència de l'usuari i la resposta de xarxa. |
+| **Inspecció L7** | `rcgen` (Generació de CA/Certificats) | Implementa **SSL Inspection**. La Passarel·la intercepta el *handshake* TLS, signa dinàmicament certificats amb la seva CA arrel generada *in-memory* i permet l'aplicació de filtres de domini al trànsit xifrat. |
+| **Registres Forenses (NSS)**| `tracing-subscriber::json()` | Genera registres de trànsit **estructurats en format JSON** a través de `tracing`. Cada esdeveniment inclou `src_ip`, `user_agent`, `domain` i `action`, garantint una traçabilitat de nivell forense, llesta per a la ingesta en plataformes SIEM. |
 
-*   **Accés Segur:** El CP escolta en un port dinàmic a **`127.0.0.1`** (localhost), adherint-se estrictament a un model d'administració Zero Trust.
-*   **UX:** El Panell de gestió es llança automàticament en iniciar el programa (`opener`) i utilitza **SSE** per a la visualització de registres en temps real.
+### 2. Control Plane (CP): Configuració Atòmica i Zero Trust
+
+El CP gestiona la configuració de forma segura i proporciona el panell d'observabilitat.
+
+| Mecanisme | Implementació Tècnica | Racional de Ciberseguretat |
+| :--- | :--- | :--- |
+| **Recàrrega de Polítiques** | `tokio::sync::RwLock<AppState>` | **Hot-Reload Atòmic**. El DP manté un bloqueig de lectura constant (`read().await`) per a alta concurrència. La interfície d'administració pren un bloqueig d'escriptura (`write().await`) **instantani** per aplicar canvis de política, garantint la consistència i l'alta disponibilitat del servei. |
+| **Seguretat d'Accés** | `TcpListener::bind("127.0.0.1:0")` | Implementa **Zero Trust Admin**. L'API de gestió només és accessible localment (localhost), aïllant la superfície d'atac de gestió. El port dinàmic evita conflictes de `AddrInUse`. |
+| **Observabilitat UX** | SSE (Server-Sent Events) | Protocol de *push* de dades en temps real per al *Traffic Feed* al Panell. Més eficient que el *polling* per a la visualització de registres en viu. |
 
 ---
 
-## 🛠️ Requisits i Desplegament
-
-### Estructura del Projecte
-
-Assegureu-vos que el vostre projecte tingui la següent estructura:
-
-```
-rusty-sase-pro/
-├── Cargo.toml
-├── src/
-│   └── main.rs
-└── static/
-    └── index.html
-```
+## 🛠️ Requisits i Instal·lació
 
 ### 1. Dependències (`Cargo.toml`)
 
-Aquest fitxer defineix l'entorn d'execució.
+Assegureu-vos que el vostre `Cargo.toml` conté aquestes dependències:
 
 ```toml
-[package]
-name = "rusty-sase-pro"
-version = "1.0.0"
-edition = "2021"
-# ... (vegeu la secció principal en espanyol per al Cargo.toml complet)
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+# ... (altres dependències)
+opener = "0.7" 
 ```
 
 ### 2. Passos de Desplegament
 
-1.  **Compilar el binari optimitzat (Recomanat):**
+1.  **Compilar el binari optimitzat:**
     ```bash
     cargo build --release
     ```
 2.  **Executar la Passarel·la (Requereix SUDO!):**
     ```bash
-    # Es requereix sudo per a la vinculació del port 8080 i permisos de registre.
     sudo ./target/release/rusty-sase-pro
     ```
 
-> **NOTA:** El terminal mostrarà el port dinàmic. El navegador s'obrirà automàticament.
-
 ## 🌐 Guia d'Ús del Sistema
 
-En executar l'ordre, el navegador s'obrirà automàticament a l'Admin UI i el proxy esdevindrà actiu.
+En executar l'ordre, el navegador s'obrirà automàticament a l'Admin UI.
 
 ### 1. Configuració de Polítiques i Panell
 
-1.  **Panell:** El navegador s'obrirà automàticament a `Admin UI: http://127.0.0.1:<Port_Dinàmic>`.
-2.  **Filtrat de Registres:** Utilitzeu el menú desplegable i el camp de text per filtrar els esdeveniments per **Domini, IP Origen, Mètode o User-Agent**.
-3.  **Detalls:** Feu clic a qualsevol fila de la taula per veure totes les metadades capturades (inclòs el User-Agent) al modal de detall.
+1.  **Panell:** El navegador obrirà: `Admin UI: http://127.0.0.1:<Port_Dinàmic>`.
+2.  **Filtrat de Registres:** Utilitzeu el menú desplegable i el camp de text per filtrar els esdeveniments per **IP Origen, Domini, Mètode o User-Agent**.
+3.  **Detalls:** Feu clic a qualsevol fila de la taula per veure totes les metadades capturades.
 
 ### 2. Configuració del Proxy Client
 
 Perquè el filtratge funcioni, heu de redirigir el trànsit dels clients al proxy:
 
-*   **IP de la Passarel·la:** La IP de xarxa local de la vostra màquina (ex: `192.168.1.50`).
+*   **Host del Proxy:** `<La Vostra IP Local>`
 *   **Port del Proxy:** `8080`
-
-**Configuració al Client:** Configureu el **Proxy Manual** del vostre navegador o dispositiu a **`<IP de la Passarel·la>:8080`**.
-
-### 3. Instal·lació del Certificat (HTTPS)
-
-Per evitar errors de seguretat en el trànsit xifrat (HTTPS):
-
-1.  Al Panell, feu clic a **🛡️ Certificado CA** per descarregar `ca.crt`.
-2.  Instal·leu `ca.crt` al vostre dispositiu com a **"Autoritat de Certificació Arrel de Confiança"**.
+*   Instal·leu el certificat **`ca.crt`** (descarregable des del Panell) com a **"Autoritat de Certificació Arrel de Confiança"** als vostres dispositius per permetre el trànsit HTTPS.
