@@ -22,7 +22,7 @@ use rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P256_SHA256};
 use chrono;
 use tokio::net::TcpListener;
 
-// --- MODELO DE DATOS (Omisión por brevedad, no hay cambios) ---
+// --- MODELO DE DATOS ACTUALIZADO: Añadido user_agent ---
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct AppConfig {
     blocked_domains: Vec<String>,
@@ -37,6 +37,7 @@ struct LogEntry {
     action: String,
     method: String,
     url_path: String,
+    user_agent: Option<String>, // NUEVO: User-Agent
 }
 
 struct AppState {
@@ -44,7 +45,7 @@ struct AppState {
     log_tx: broadcast::Sender<LogEntry>,
 }
 
-// --- PROXY HANDLER (Omisión por brevedad, no hay cambios) ---
+// --- PROXY HANDLER (DATA PLANE) ---
 #[derive(Clone)]
 struct SaseHandler {
     state: Arc<AppState>,
@@ -63,6 +64,13 @@ impl HttpHandler for SaseHandler {
         let method = req.method().to_string();
         let url_path = req.uri().path().to_string();
 
+        // --- MEJORA 1: Captura del User-Agent ---
+        let user_agent = req.headers()
+            .get(hudsucker::hyper::header::USER_AGENT)
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
+        // --- FIN MEJORA 1 ---
+
         let entry = LogEntry {
             timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
             src_ip: src_ip.clone(),
@@ -70,6 +78,7 @@ impl HttpHandler for SaseHandler {
             action: action.to_string(),
             method: method.clone(),
             url_path: url_path.clone(),
+            user_agent: user_agent.clone(), // NUEVO
         };
 
         // Enviar log al stream en vivo y al sistema de archivos (vía tracing)
@@ -80,7 +89,8 @@ impl HttpHandler for SaseHandler {
             domain = %host,
             action = %action,
             method = %method,
-            path = %url_path
+            path = %url_path,
+            user_agent = ?user_agent // NUEVO en logs
         );
 
         if blocked {
@@ -96,7 +106,7 @@ impl HttpHandler for SaseHandler {
     async fn handle_response(&mut self, _ctx: &HttpContext, res: Response<Body>) -> Response<Body> { res }
 }
 
-// --- ADMIN API (CONTROL PLANE) CORREGIDO ---
+// --- ADMIN API (CONTROL PLANE) ---
 async fn update_policy(State(state): State<Arc<AppState>>, Json(new_conf): Json<AppConfig>) -> impl axum::response::IntoResponse {
     let mut conf = state.config.write().await;
     *conf = new_conf;

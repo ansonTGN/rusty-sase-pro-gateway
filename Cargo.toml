@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-stream = { version = "0.1", features = ["sync"] } 
+tokio-stream = { version = "0.1", features = ["sync"] } # 'sync' es crucial para BroadcastStream
 hudsucker = "0.21"
 rcgen = "0.11"
 axum = "0.7"
@@ -15,8 +15,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-appender = "0.2"
 chrono = "0.4"
-futures-util = { version = "0.3", features = ["io"] }
+futures-util = { version = "0.3", features = ["io"] } # 'io' es necesario para FutureExt
 tower-http = { version = "0.5", features = ["fs"] }
 rustls-pemfile = "1.0"
 async-trait = "0.1"
-opener = "0.7" # <--- ¡Nuevo! Para abrir el navegador
+opener = "0.7" # Para abrir el navegador automáticamente
+
+# No se requieren más dependencias para el código final.
